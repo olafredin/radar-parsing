@@ -12,7 +12,7 @@ from pyproj import Transformer
 # ---------- Paths (robust: relative to script location) ----------
 SCRIPT_DIR  = Path(__file__).resolve().parent          # .../scripts
 PROJECT_DIR = SCRIPT_DIR.parent                         # project root
-DATA_DIR    = PROJECT_DIR / "data_raw"
+DATA_DIR    = PROJECT_DIR / "output_cor_qc"    # input .cor files
 OUT_DIR     = PROJECT_DIR / "output"
 OUT_DIR.mkdir(exist_ok=True)
 
