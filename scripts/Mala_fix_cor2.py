@@ -23,7 +23,7 @@ EXPECTED_EW = "W"
 USE_TELEPORT_QC = True  # <-- set True to enable teleport detection
 
 # If timestamps parse cleanly, we use speed (m/s). Otherwise we use step distance (m).
-MAX_SPEED_MPS = 6.0     # skidoo + radar: pick something conservative (e.g., 10–20 m/s)
+MAX_SPEED_MPS = 6.0     # skidoo + radar maximum speed
 MAX_STEP_M    = 40.0    # fallback if time is missing/garbled
 MIN_DT_S      = 0.05     # ignore near-zero dt to avoid divide-by-zero/clock jitter
 
@@ -125,7 +125,7 @@ def _looks_like_float(token: str) -> bool:
 
 def _normalize_mala_fields(line: str) -> Optional[List[str]]:
     """
-    Try to coerce a messy Malå .cor line into the expected 10-column format:
+    Try to wrangle a messy Malå .cor line into the expected 10-column format:
     0 idx, 1 date, 2 time, 3 lat, 4 S/N, 5 lon, 6 W/E, 7 elev, 8 M, 9 last
 
     If there are extra columns (field shifting), we join extras into the last field.
