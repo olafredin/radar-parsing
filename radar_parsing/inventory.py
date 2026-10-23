@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from .cor import read_cor_table
-from .geo import track_length_m
+from .geo import gap_length_m, track_length_m
 from .rad import RadHeader
 from .rd3 import DTYPES, n_traces_from_size
 
@@ -19,11 +19,13 @@ def _bases(raw_dir: Path) -> list[str]:
     return sorted({p.stem for p in raw_dir.iterdir() if p.suffix.lower() == ".rad"})
 
 
-def inventory(raw_dir: str | Path, qc_dir: str | Path | None = None) -> pd.DataFrame:
+def inventory(raw_dir: str | Path, qc_dir: str | Path | None = None, max_step_m: float = 50.0) -> pd.DataFrame:
     """One row per recording (per .rad file) with header info, trace counts and GNSS coverage.
 
     If ``qc_dir`` holds a QC'd .cor for the recording, along-track length and
-    time span are computed from it; otherwise from the raw .cor.
+    time span are computed from it; otherwise from the raw .cor. ``length_km``
+    is the recorded length; steps longer than ``max_step_m`` between
+    consecutive fixes (moves during a recording pause) are summed in ``gap_km``.
     """
     raw_dir = Path(raw_dir)
     qc_dir = Path(qc_dir) if qc_dir else None
@@ -61,7 +63,8 @@ def inventory(raw_dir: str | Path, qc_dir: str | Path | None = None) -> pd.DataF
             t = pd.to_datetime(cor["date"] + " " + cor["time"], errors="coerce").dropna()
             row["start"] = t.min() if len(t) else None
             row["end"] = t.max() if len(t) else None
-            row["length_km"] = round(track_length_m(cor["lat"], cor["lon"]) / 1000, 3)
+            row["length_km"] = round(track_length_m(cor["lat"], cor["lon"], max_step_m) / 1000, 3)
+            row["gap_km"] = round(gap_length_m(cor["lat"], cor["lon"], max_step_m) / 1000, 3)
             # Smooth GNSS excursions (not caught by the spike filter) show up here
             row["elev_min"] = round(float(cor["elev"].min()), 3)
             row["elev_max"] = round(float(cor["elev"].max()), 3)

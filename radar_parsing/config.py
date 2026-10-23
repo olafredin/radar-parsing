@@ -44,6 +44,7 @@ class CorQCConfig:
     relock_after: int = 10       # accept N consecutive self-consistent rejected fixes (0 = never)
     use_trace_time: bool = True  # time from trace numbers x .rad TIME INTERVAL as well as timestamps
     time_tol_s: float = 2.0      # timestamps further than this off the trace clock are ignored
+    pause_s: float = 10.0        # never interpolate across a recording pause longer than this
     # Elevation spikes (garbled digits, e.g. 8.962 instead of 38.962):
     # flag |elev - running median| > elev_max_dev_m over elev_window fixes.
     elev_qc: bool = True
@@ -60,10 +61,20 @@ class TrackQCConfig:
 
 
 @dataclass
+class GisConfig:
+    """Settings for ``gis`` (GeoPackage/shapefile export for QGIS)."""
+
+    epsg: int = 3031            # Antarctic Polar Stereographic, as in Quantarctica
+    tick_every: int = 500       # trace-number ticks along each transect
+    split_jump_m: float = 50.0  # break transect lines at jumps larger than this
+
+
+@dataclass
 class Config:
     bbox: BBox = field(default_factory=BBox)
     cor_qc: CorQCConfig = field(default_factory=CorQCConfig)
     track_qc: TrackQCConfig = field(default_factory=TrackQCConfig)
+    gis: GisConfig = field(default_factory=GisConfig)
     # UTM 29S suits the Neumayer / western RLIS area (~11 deg W). Use 3031 for
     # Antarctic Polar Stereographic if tracks span several UTM zones.
     epsg: int = 32729

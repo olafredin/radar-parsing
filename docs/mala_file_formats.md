@@ -80,7 +80,9 @@ flag on its own.
 ### Pauses
 
 Trace numbering stops while recording is paused, but the GNSS clock runs on. For example,
-DAT_0012 has 23 880 traces (5 970 s at 0.25 s) but spans 8 144 s of GNSS time. This is why the teleport
+DAT_0012 has 23 880 traces (5 970 s at 0.25 s) but spans 8 144 s of GNSS time. In 2025/26 the
+sledge often moved during pauses (up to 1.3 km), so `fix-cor` never interpolates across a pause,
+and the GIS export splits transects there. This is also why the teleport
 test uses the larger of the trace-clock and timestamp differences.
 
 ### Stale LAST TRACE

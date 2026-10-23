@@ -21,6 +21,9 @@ class Paths:
         self.out = Path(args.out_dir)
         self.cor_qc = self.out / "cor_qc"
         self.cor_qc_report = self.out / "cor_qc_report.csv"
+        self.cor_qc_flags = self.out / "cor_qc_flags.csv"
+        self.gpkg = self.out / "radar_tracks.gpkg"
+        self.shp_dir = self.out / "gis_shp"
         self.tracks = self.out / "mala_tracks_compiled.csv"
         self.tracks_qc = self.out / "mala_tracks_compiled_qc.csv"
         self.inventory = self.out / "inventory.csv"
@@ -37,13 +40,14 @@ class Paths:
 # ---------------------------------------------------------------------------
 
 def cmd_fix_cor(p: Paths, cfg: Config, args) -> None:
-    from .qc import qc_directory
+    from .qc import flags_table, qc_directory
 
     p.require_raw()
     results = qc_directory(p.raw, p.cor_qc, cfg)
     report = pd.DataFrame([r.as_dict() for r in results])
     p.out.mkdir(parents=True, exist_ok=True)
     report.to_csv(p.cor_qc_report, index=False)
+    flags_table(results).to_csv(p.cor_qc_flags, index=False)
     written = report[report["status"] == "written"] if len(report) else report
     print(f"fix-cor: wrote {len(written)} of {len(report)} .cor files to {p.cor_qc}")
     if len(report):
@@ -94,7 +98,9 @@ def cmd_inventory(p: Paths, cfg: Config, args) -> None:
     df.to_csv(p.inventory, index=False)
     gnss = int((df["gnss_fixes"] > 0).sum()) if len(df) else 0
     km = df["length_km"].sum() if "length_km" in df else 0
-    print(f"inventory: {len(df)} recordings, {gnss} with GNSS, {km:.1f} km of track -> {p.inventory}")
+    gap = df["gap_km"].sum() if "gap_km" in df else 0
+    print(f"inventory: {len(df)} recordings, {gnss} with GNSS, {km:.1f} km recorded "
+          f"(+ {gap:.1f} km moved during pauses) -> {p.inventory}")
     if len(df):
         bad = df.loc[~df["data_ok"], "file_base"].tolist()
         stale = df.loc[df["data_ok"] & ~df["header_last_trace_ok"], "file_base"].tolist()
@@ -181,12 +187,46 @@ def cmd_merge(p: Paths, cfg: Config, args) -> None:
         print(f"  joint {j.after} | {j.before}: {gap_s}, {gap_m} between last and first GNSS fix{flag}")
 
 
+GIS_HINT = 'GIS export needs the optional packages: pip install -e ".[gis]"'
+
+
+def cmd_gis(p: Paths, cfg: Config, args) -> None:
+    try:
+        from .gis import build_layers, write_gpkg, write_shapefiles
+    except ImportError:
+        sys.exit(f"gis: {GIS_HINT}")
+    p.require_raw()
+    if not p.cor_qc.is_dir():
+        sys.exit(f"No QC'd .cor files in {p.cor_qc}; run 'fix-cor' first.")
+    if getattr(args, "tick_every", None):
+        cfg.gis.tick_every = args.tick_every
+    flags = pd.read_csv(p.cor_qc_flags, keep_default_na=False) if p.cor_qc_flags.exists() else None
+    if flags is not None and len(flags):
+        flags["time_ignored"] = flags["time_ignored"].astype(str).str.lower() == "true"
+    layers = build_layers(p.cor_qc, p.raw, cfg, flags=flags, reflexw_dir=p.reflexw)
+    if getattr(args, "format", "gpkg") == "shp":
+        out = write_shapefiles(layers, p.shp_dir)
+        where = p.shp_dir
+    else:
+        where = write_gpkg(layers, p.gpkg)
+    counts = ", ".join(f"{k} {len(v):,}" for k, v in layers.items())
+    print(f"gis: EPSG:{cfg.gis.epsg}; {counts} -> {where}")
+    if where != p.gpkg and where != p.shp_dir:
+        print(f"  note: {p.gpkg.name} is locked (open in QGIS?); wrote {where.name} instead")
+
+
 def cmd_run(p: Paths, cfg: Config, args) -> None:
     cmd_fix_cor(p, cfg, args)
     cmd_tracks(p, cfg, args)
     args.action = None
     cmd_track_qc(p, cfg, args)
     cmd_inventory(p, cfg, args)
+    try:
+        import geopandas  # noqa: F401
+    except ImportError:
+        print(f"gis: skipped. {GIS_HINT}")
+        return
+    cmd_gis(p, cfg, args)
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +244,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = ap.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("run", parents=[common], help="fix-cor + tracks + track-qc + inventory")
+    sub.add_parser("run", parents=[common], help="fix-cor + tracks + track-qc + inventory (+ gis if installed)")
     sub.add_parser("fix-cor", parents=[common], help="QC raw .cor files -> OUT/cor_qc/")
     sub.add_parser("tracks", parents=[common], help="Compile QC'd .cor files -> OUT/mala_tracks_compiled.csv")
     s = sub.add_parser("track-qc", parents=[common], help="Second-pass QC -> OUT/mala_tracks_compiled_qc.csv")
@@ -219,6 +259,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-traces", type=int, default=2000, help="Downsample to at most this many traces")
     s.add_argument("--no-extrapolation", action="store_true", help="No positions outside the GNSS trace range")
     s.add_argument("--save", action="store_true", help="Save PNGs to OUT/figures/ instead of showing")
+    s = sub.add_parser("gis", parents=[common], help="GeoPackage for QGIS -> OUT/radar_tracks.gpkg (EPSG:3031)")
+    s.add_argument("--format", choices=["gpkg", "shp"], default="gpkg", help="shp writes OUT/gis_shp/*.shp")
+    s.add_argument("--tick-every", type=int, default=None, help="Trace-number tick spacing (default from config: 500)")
     s = sub.add_parser("export", parents=[common], help="Copy recordings + QC'd .cor to OUT/reflexw/ for ReflexW")
     s.add_argument("bases", nargs="*", help="Recording names, e.g. DAT_0013_A1")
     s.add_argument("--all", action="store_true", help="Export every recording (copies ~2 GB)")
@@ -238,6 +281,7 @@ COMMANDS = {
     "inventory": cmd_inventory,
     "manifest": cmd_manifest,
     "plot": cmd_plot,
+    "gis": cmd_gis,
     "export": cmd_export,
     "merge": cmd_merge,
 }

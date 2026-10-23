@@ -36,12 +36,29 @@ def to_unsigned(value_signed: float, neg_hemi: str, pos_hemi: str) -> tuple[floa
     return (abs(value_signed), neg_hemi) if value_signed < 0 else (abs(value_signed), pos_hemi)
 
 
-def track_length_m(lat: np.ndarray, lon: np.ndarray) -> float:
-    """Cumulative along-track length in metres (NaNs ignored)."""
+def track_length_m(lat: np.ndarray, lon: np.ndarray, max_step_m: float | None = None) -> float:
+    """Cumulative along-track length in metres (NaNs ignored).
+
+    With ``max_step_m``, steps longer than that (moves during a recording
+    pause) are left out, giving the recorded length.
+    """
+    steps = _steps(lat, lon)
+    if max_step_m is not None and max_step_m > 0:
+        steps = steps[steps <= max_step_m]
+    return float(steps.sum())
+
+
+def gap_length_m(lat: np.ndarray, lon: np.ndarray, max_step_m: float) -> float:
+    """Total length of steps longer than ``max_step_m`` (not recorded)."""
+    steps = _steps(lat, lon)
+    return float(steps[steps > max_step_m].sum()) if max_step_m > 0 else 0.0
+
+
+def _steps(lat, lon) -> np.ndarray:
     lat = np.asarray(lat, dtype=float)
     lon = np.asarray(lon, dtype=float)
     ok = np.isfinite(lat) & np.isfinite(lon)
     lat, lon = lat[ok], lon[ok]
     if lat.size < 2:
-        return 0.0
-    return float(np.nansum(haversine_m_vec(lat[:-1], lon[:-1], lat[1:], lon[1:])))
+        return np.zeros(0)
+    return haversine_m_vec(lat[:-1], lon[:-1], lat[1:], lon[1:])

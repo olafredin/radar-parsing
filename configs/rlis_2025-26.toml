@@ -26,6 +26,7 @@ min_dt_s = 0.05
 relock_after = 10       # accept this many consecutive self-consistent rejected fixes (0 = never)
 use_trace_time = true   # also time fixes by trace number x .rad TIME INTERVAL
 time_tol_s = 2.0        # timestamps further off the trace clock are treated as garbled
+pause_s = 10.0          # never interpolate rejected fixes across a recording pause longer than this
 elev_qc = true
 elev_max_dev_m = 2.0    # spike threshold vs. running median
 elev_window = 11        # running-median window (number of fixes)
@@ -33,3 +34,9 @@ elev_window = 11        # running-median window (number of fixes)
 [track_qc]
 max_speed_mps = 10.0
 action = "interpolate"  # or "drop"
+
+[gis]
+# GeoPackage for QGIS. 3031 = Antarctic Polar Stereographic, as in Quantarctica.
+epsg = 3031
+tick_every = 500        # trace-number ticks along each transect
+split_jump_m = 50.0     # break transect lines where consecutive fixes are further apart

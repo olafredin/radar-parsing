@@ -110,6 +110,38 @@ def test_garbled_timestamp_cannot_admit_garbled_position(tmp_path):
     assert df.loc[20, "lat"] == pytest.approx(-71.9 + 20 * 2e-5, abs=1e-9)
 
 
+def test_no_interpolation_across_recording_pause(tmp_path):
+    """Real case from DAT_0114: GNSS degrades just before a 5-min recording pause
+    during which the sledge moves ~650 m. The rejected fixes before the pause must
+    stay near the last good fix, not be spread along a line towards the far side."""
+    from conftest import cor_line, write_crlf
+    from radar_parsing.geo import haversine_m
+
+    lines, trace = [], 1
+    for i in range(20):                       # before the pause, ~1.4 m/s
+        lat = -71.9 + i * 1.3e-5 + (0.002 if i >= 16 else 0.0)   # 16-19 garbled, 220 m off
+        lines.append(cor_line(trace, f"15:20:{i:02d}", lat, -11.0))
+        trace += 4
+    for i in range(15):                       # after a 300 s pause, 670 m further north
+        lines.append(cor_line(trace, f"15:25:{20 + i:02d}", -71.9 + 0.006 + i * 1.3e-5, -11.0))
+        trace += 4
+    p = tmp_path / "pause.cor"
+    write_crlf(p, lines)
+
+    res = qc_cor_file(p, tmp_path / "out.cor", trace_interval_s=0.25)
+    assert res.n_pauses == 1 and res.n_teleport == 4
+    df = read_cor_table(tmp_path / "out.cor")
+    anchor = df.loc[15]
+    for i in range(16, 20):
+        assert haversine_m(anchor.lat, anchor.lon, df.loc[i, "lat"], df.loc[i, "lon"]) < 1.0
+
+    cfg = Config()
+    cfg.cor_qc.pause_s = 0                    # old behaviour: interpolate across the pause
+    qc_cor_file(p, tmp_path / "old.cor", cfg, trace_interval_s=0.25)
+    old = read_cor_table(tmp_path / "old.cor")
+    assert haversine_m(anchor.lat, anchor.lon, old.loc[19, "lat"], old.loc[19, "lon"]) > 400
+
+
 def test_directory(raw_dir, tmp_path):
     results = {r.file: r.status for r in qc_directory(raw_dir, tmp_path / "qc")}
     assert results == {

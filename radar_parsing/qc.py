@@ -15,7 +15,10 @@ For each raw .cor file the steps are:
    ``relock_after`` mutually consistent rejected fixes is re-accepted, so a
    bad anchor cannot lock out the rest of the file.
 5. Linearly interpolate lat/lon across all flagged fixes (in line order),
-   holding the first/last good value at the ends.
+   holding the first/last good value at the ends. Recording pauses longer
+   than ``pause_s`` (found from the trace clock) split the file into
+   stretches, and interpolation never crosses a pause: the sledge may have
+   moved while trace numbering stood still.
 6. Elevation: unrecoverable values, and spikes deviating more than
    ``elev_max_dev_m`` from a running median, are interpolated the same way.
 7. Write the corrected file with the original column layout and precision.
@@ -26,7 +29,7 @@ Files with no valid fix at all (test recordings, no GNSS) are skipped.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
@@ -59,14 +62,29 @@ class CorQCResult:
     n_time_garbled: int = 0   # timestamps unparseable or off the trace clock (not used)
     n_teleport: int = 0
     n_interpolated: int = 0   # n_invalid_fix + n_teleport
+    n_pauses: int = 0         # recording pauses (no interpolation across them)
     n_unit_repaired: int = 0
     n_elev_fused: int = 0
     n_elev_shifted: int = 0
     n_elev_spikes: int = 0
     n_elev_interpolated: int = 0   # unrecoverable + spikes
+    # One FixFlags per written line (not part of the per-file report)
+    flags: list["FixFlags"] = field(default_factory=list, repr=False)
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("flags")
+        return d
+
+
+@dataclass
+class FixFlags:
+    """What fix-cor did to one GNSS fix. Empty strings mean 'untouched'."""
+
+    trace_id: Optional[int]
+    position: str      # "", "invalid" (unparseable/zero/bbox/hemisphere), "teleport"
+    elevation: str     # "", "repaired" (un-fused/un-shifted), "unparseable", "spike"
+    time_ignored: bool  # timestamp unparseable or off the trace clock
 
 
 def interp_fill(values: Sequence[Optional[float]], valid: Sequence[bool]) -> list[float]:
@@ -188,6 +206,47 @@ def garbled_times(
     return flags
 
 
+def pause_breaks(
+    times: Sequence[Optional[datetime]],
+    traces: Sequence[Optional[int]],
+    trace_interval_s: float,
+    pause_s: float,
+) -> list[int]:
+    """Line indices where a recording pause starts a new stretch.
+
+    Trace numbering stops during a pause while the GNSS clock runs on, so the
+    offset (time - trace x trace_interval) jumps by the pause length. Call
+    this after :func:`garbled_times` has removed bad timestamps.
+    """
+    idx = [i for i, (t, k) in enumerate(zip(times, traces)) if t is not None and k is not None]
+    if len(idx) < 2 or pause_s <= 0:
+        return []
+    t0 = times[idx[0]]
+    off = [(times[i] - t0).total_seconds() - traces[i] * trace_interval_s for i in idx]  # type: ignore[operator]
+    return [b for a, b, oa, ob in zip(idx, idx[1:], off, off[1:]) if ob - oa > pause_s]
+
+
+def interp_fill_stretches(
+    values: Sequence[Optional[float]], valid: Sequence[bool], breaks: Sequence[int]
+) -> list[float]:
+    """:func:`interp_fill` within each stretch between ``breaks``, never across them.
+
+    Rejected values at the edge of a stretch are held at the nearest good value
+    in that stretch. A stretch without any good value falls back to
+    interpolation over the whole file.
+    """
+    n = len(values)
+    if not breaks:
+        return interp_fill(values, valid)
+    whole = interp_fill(values, valid)
+    out = list(whole)
+    edges = [0, *sorted(breaks), n]
+    for a, b in zip(edges, edges[1:]):
+        if any(valid[a:b]):
+            out[a:b] = interp_fill(values[a:b], valid[a:b])
+    return out
+
+
 def elevation_flags(elev: Sequence[Optional[float]], ok: Sequence[bool], cfg: CorQCConfig) -> list[bool]:
     """Mark elevations deviating from a centred running median as invalid."""
     out = list(ok)
@@ -225,6 +284,7 @@ def qc_cor_file(
     times: list[Optional[datetime]] = []
     traces: list[Optional[int]] = []
     elev_ok: list[bool] = []
+    repairs: list[str] = []
     lat_dec: Optional[int] = None
     lon_dec: Optional[int] = None
 
@@ -237,6 +297,7 @@ def qc_cor_file(
         res.n_unit_repaired += norm.repair == REPAIR_UNIT
         res.n_elev_fused += norm.repair == REPAIR_FUSED
         res.n_elev_shifted += norm.repair == REPAIR_SHIFTED
+        repairs.append(norm.repair)
         elev_ok.append(norm.repair != REPAIR_ELEV_BAD and looks_like_float(f[7].strip()))
         times.append(parse_datetime(f[1].strip(), f[2].strip()))
         traces.append(int(f[0]) if f[0].strip().isdigit() else None)
@@ -280,8 +341,10 @@ def qc_cor_file(
     res.n_teleport = sum(a and not b for a, b in zip(valid, valid2))
     res.n_interpolated = valid2.count(False)
 
-    lat_f = interp_fill(lat_s, valid2)
-    lon_f = interp_fill(lon_s, valid2)
+    breaks = pause_breaks(times, traces, trace_interval_s, qc.pause_s) if trace_interval_s else []
+    res.n_pauses = len(breaks)
+    lat_f = interp_fill_stretches(lat_s, valid2, breaks)
+    lon_f = interp_fill_stretches(lon_s, valid2, breaks)
     lat_dec = 8 if lat_dec is None else lat_dec
     lon_dec = 8 if lon_dec is None else lon_dec
 
@@ -289,7 +352,7 @@ def qc_cor_file(
     elev_good = elevation_flags(elev_vals, elev_ok, qc)
     res.n_elev_spikes = sum(a and not b for a, b in zip(elev_ok, elev_good))
     if not all(elev_good) and any(elev_good):
-        elev_f = interp_fill(elev_vals, elev_good)
+        elev_f = interp_fill_stretches(elev_vals, elev_good, breaks)
         for f, ok, e in zip(rows, elev_good, elev_f):
             if not ok:
                 f[7] = f"{e:.3f}"
@@ -305,7 +368,29 @@ def qc_cor_file(
         out_lines.append("\t".join(f))
     write_lines(out_path, out_lines)
     res.status = "written"
+
+    for i in range(len(rows)):
+        pos = "" if valid2[i] else ("teleport" if valid[i] else "invalid")
+        if not elev_ok[i]:
+            el = "unparseable"
+        elif not elev_good[i]:
+            el = "spike"
+        elif repairs[i] in (REPAIR_FUSED, REPAIR_SHIFTED):
+            el = "repaired"
+        else:
+            el = ""
+        res.flags.append(FixFlags(traces[i], pos, el, times[i] is None))
     return res
+
+
+def flags_table(results: Sequence[CorQCResult]) -> pd.DataFrame:
+    """All per-fix flags from a fix-cor run as one table (one row per GNSS fix)."""
+    rows = [
+        {"file_base": Path(r.file).stem, "trace_id": f.trace_id, "position": f.position,
+         "elevation": f.elevation, "time_ignored": f.time_ignored}
+        for r in results for f in r.flags
+    ]
+    return pd.DataFrame(rows, columns=["file_base", "trace_id", "position", "elevation", "time_ignored"])
 
 
 def qc_directory(raw_dir: str | Path, out_dir: str | Path, cfg: Config | None = None) -> list[CorQCResult]:

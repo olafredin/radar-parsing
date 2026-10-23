@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.0 — 2026-10-23
+
+### Added
+- `gis`: GeoPackage `output/radar_tracks.gpkg` in EPSG:3031 (Quantarctica) with layers
+  `transects` (split at jumps > 50 m), `fixes` (with QC flags), `trace_ticks` (every 500
+  traces) and `profiles` (files in `output/reflexw/`). `--format shp` for shapefiles; all field
+  names ≤ 10 characters. Part of `run` when the optional `gis` extra is installed.
+- `fix-cor` writes `output/cor_qc_flags.csv`: per GNSS fix, whether the position was
+  interpolated (`invalid`/`teleport`), the elevation repaired or interpolated
+  (`repaired`/`unparseable`/`spike`), and whether the timestamp was ignored.
+- `[gis]` section in the config (`epsg`, `tick_every`, `split_jump_m`).
+
+### Fixed
+- Rejected fixes next to a recording pause were interpolated towards the first fix after the
+  pause, although the sledge often moved during pauses. Example: DAT_0114, where fixes recorded
+  seconds after trace 953 were placed up to 520 m along the 650 m move during a 4.7 min pause.
+  Interpolation no longer crosses a pause longer than `cor_qc.pause_s` (10 s). Pauses per file
+  are reported as `n_pauses` in `cor_qc_report.csv`.
+
+### Changed
+- `length_km` (inventory, transects, profiles) is now the recorded length; moves of more than
+  50 m between consecutive fixes (recording pauses) are reported separately as `gap_km`.
+
 ## 0.3.0 — 2026-10-23
 
 ### Added
@@ -38,7 +61,8 @@ Refactor of the 2025/26 field scripts into a package with a command-line interfa
   0051, 0067 and 0104, with 63–96 % of fixes rejected and the track off by up to 9 km
   (DAT_0051). Elapsed time now also comes from trace numbers × `TIME INTERVAL`. Timestamps
   that disagree with that clock are ignored, and a run of 10 consistent rejected fixes resets
-  the anchor. Rejected fixes over all files: 11 715 → 392. Total track length: 305.6 → 338.7 km.
+  the anchor. Rejected fixes over all files: 11 715 → 392. Total track length (including moves
+  during recording pauses): 305.6 → 338.7 km.
 - Elevation fused with its unit (`38.944M`) was replaced by the quality value (0.6 m); now 38.944.
 - Shifted lines (`M 9 38.975`) put the elevation into the quality column; quality is now `.`.
 - Garbled elevations (dropped digits, e.g. `8.962` or `38957.0`) were passed through to the

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "radar-parsing"
-version = "0.3.0"
+version = "0.4.0"
 description = "Parse, quality-control and plot Malå ground-penetrating radar data (.rad/.rd3/.cor)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gis = ["geopandas>=0.14", "pyogrio>=0.7", "shapely>=2.0"]
 dev = ["pytest>=7"]
 
 [project.scripts]
