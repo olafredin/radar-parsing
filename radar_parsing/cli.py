@@ -25,6 +25,7 @@ class Paths:
         self.tracks_qc = self.out / "mala_tracks_compiled_qc.csv"
         self.inventory = self.out / "inventory.csv"
         self.figures = self.out / "figures"
+        self.reflexw = self.out / "reflexw"
 
     def require_raw(self) -> None:
         if not self.raw.is_dir():
@@ -137,6 +138,49 @@ def cmd_plot(p: Paths, cfg: Config, args) -> None:
         print(f"plot: wrote {w}")
 
 
+def _qc_dir_or_warn(p: Paths) -> Path | None:
+    if p.cor_qc.is_dir():
+        return p.cor_qc
+    print(f"  WARNING: no QC'd .cor files in {p.cor_qc}; raw .cor files are used. Run 'fix-cor' first.")
+    return None
+
+
+def cmd_export(p: Paths, cfg: Config, args) -> None:
+    from .writer import export_bundle
+
+    p.require_raw()
+    qc = _qc_dir_or_warn(p)
+    bases = args.bases
+    if args.all:
+        bases = sorted(f.stem for f in p.raw.iterdir() if f.suffix.lower() in (".rd3", ".rd7"))
+    if not bases:
+        sys.exit("export: give recording names or --all")
+    for base in bases:
+        r = export_bundle(base, p.raw, qc, p.reflexw, overwrite=args.overwrite)
+        note = "  (LAST TRACE corrected)" if r.header_fixed else ""
+        print(f"export: {base}: {r.n_traces} traces, .cor {r.cor}{note}")
+    print(f"  -> {p.reflexw}  (ReflexW: import format MALA RD3, trace headers RAMAC-GPS)")
+
+
+def cmd_merge(p: Paths, cfg: Config, args) -> None:
+    from .writer import merge_bundles
+
+    p.require_raw()
+    qc = _qc_dir_or_warn(p)
+    try:
+        r = merge_bundles(args.bases, p.raw, qc, p.reflexw, name=args.name, overwrite=args.overwrite)
+    except (ValueError, FileExistsError) as e:
+        sys.exit(f"merge: {e}")
+    print(f"merge: {r.name}: {r.n_traces} traces from {len(r.parts)} recordings -> {p.reflexw}")
+    for part in r.parts:
+        print(f"  {part['base']}: traces {part['first_trace']}-{part['first_trace'] + part['n_traces'] - 1}, .cor {part['cor']}")
+    for j in r.junctions:
+        gap_s = f"{j.gap_s:.0f} s" if j.gap_s is not None else "? s"
+        gap_m = f"{j.gap_m:.0f} m" if j.gap_m is not None else "? m"
+        flag = "  <-- check" if (j.gap_m or 0) > 50 or (j.gap_s is not None and j.gap_s < 0) else ""
+        print(f"  joint {j.after} | {j.before}: {gap_s}, {gap_m} between last and first GNSS fix{flag}")
+
+
 def cmd_run(p: Paths, cfg: Config, args) -> None:
     cmd_fix_cor(p, cfg, args)
     cmd_tracks(p, cfg, args)
@@ -175,6 +219,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--max-traces", type=int, default=2000, help="Downsample to at most this many traces")
     s.add_argument("--no-extrapolation", action="store_true", help="No positions outside the GNSS trace range")
     s.add_argument("--save", action="store_true", help="Save PNGs to OUT/figures/ instead of showing")
+    s = sub.add_parser("export", parents=[common], help="Copy recordings + QC'd .cor to OUT/reflexw/ for ReflexW")
+    s.add_argument("bases", nargs="*", help="Recording names, e.g. DAT_0013_A1")
+    s.add_argument("--all", action="store_true", help="Export every recording (copies ~2 GB)")
+    s.add_argument("--overwrite", action="store_true")
+    s = sub.add_parser("merge", parents=[common], help="Join consecutive recordings into one profile in OUT/reflexw/")
+    s.add_argument("bases", nargs="+", help="Recording names in profile order")
+    s.add_argument("--name", default=None, help="Output name (default e.g. DAT_0032_0033_A1)")
+    s.add_argument("--overwrite", action="store_true")
     return ap
 
 
@@ -186,6 +238,8 @@ COMMANDS = {
     "inventory": cmd_inventory,
     "manifest": cmd_manifest,
     "plot": cmd_plot,
+    "export": cmd_export,
+    "merge": cmd_merge,
 }
 
 

@@ -45,7 +45,8 @@ radar-parsing/
     ├── mala_tracks_compiled.csv
     ├── mala_tracks_compiled_qc.csv
     ├── inventory.csv          one row per recording
-    └── figures/               PNGs from `plot --save`
+    ├── figures/               PNGs from `plot --save`
+    └── reflexw/               recordings ready for ReflexW (`export`, `merge`)
 ```
 
 Other folders can be used with `--raw-dir` and `--out-dir` on any command.
@@ -68,6 +69,8 @@ radar-parsing plot DAT_0013_A1 --gain 1 --save   # PNGs to output/figures/
 | `inventory` | `data_raw/`, `output/cor_qc/` | `output/inventory.csv` | Per recording: antenna, samples, time window, trace count (checked against `LAST TRACE`), number of GNSS fixes, start/end time, track length and elevation range. |
 | `plot BASE` | `data_raw/BASE.*`, `output/cor_qc/BASE.cor` | screen or `output/figures/` | Quick-look radargram (trace mean removed, optional t^p gain, two-way time in ns) and the GNSS track interpolated to every trace. |
 | `manifest` | `data_raw/` | `data_raw/MANIFEST.sha256` | SHA-256 checksums of every raw file; `manifest --check` verifies a received copy. |
+| `export BASE… \| --all` | `data_raw/`, `output/cor_qc/` | `output/reflexw/` | Copies recordings for ReflexW with the **QC'd** `.cor` and a header whose `LAST TRACE` matches the data. Traces are unchanged. |
+| `merge BASE BASE…` | `data_raw/`, `output/cor_qc/` | `output/reflexw/` | Joins consecutive recordings into one profile (e.g. `DAT_0032_0033_A1`). Renumbers the `.cor` traces and reports the time and distance gap at each joint. Recordings with different antenna, samples or sampling frequency are refused. |
 | `run` | | | `fix-cor`, `tracks`, `track-qc` and `inventory` in sequence. |
 
 `radar-parsing <command> --help` lists all options.
@@ -96,6 +99,45 @@ the `elev_min` and `elev_max` columns of `inventory.csv`.
 All thresholds are in [`configs/rlis_2025-26.toml`](configs/rlis_2025-26.toml), which also holds
 the built-in defaults. File-format details and the full glitch catalogue are in
 [`docs/mala_file_formats.md`](docs/mala_file_formats.md).
+
+## Into ReflexW
+
+```bash
+radar-parsing run                                  # QC first
+radar-parsing export DAT_0013_A1 DAT_0014_A1       # single recordings
+radar-parsing merge DAT_0032_A1 DAT_0033_A1        # one profile from consecutive files
+```
+
+In ReflexW, import `output/reflexw/` with the import format **MALA RD3** and the trace
+headers set to **RAMAC-GPS**. ReflexW then reads the `.cor` with the same name into the trace
+headers and interpolates between fixes ([Sandmeier: GPS coordinates in REFLEXW](https://www.sandmeier-geo.de/Download/gpscoordinates.pdf)).
+The `.cor` keeps the Malå format (lat/lon in degrees); switch on ReflexW's UTM conversion if
+you want metres.
+
+Check the joint report from `merge`. Recordings are joined end to end without gap traces, so a
+long pause or a big jump between files shows up as a step in the profile.
+
+### Writing your own processed data
+
+```python
+from radar_parsing.rad import RadHeader
+from radar_parsing.rd3 import read_traces
+from radar_parsing.writer import write_bundle
+from radar_parsing.cor import read_lines
+
+hdr = RadHeader.from_file("data_raw/DAT_0013_A1.rad")
+a = read_traces("data_raw/DAT_0013_A1.rd3", hdr.samples).astype(float)   # (traces, samples)
+a = a - a.mean(axis=1, keepdims=True)                                     # your processing
+write_bundle("output/reflexw", "DAT_0013_proc", a, "data_raw/DAT_0013_A1.rad",
+             cor_lines=read_lines("output/cor_qc/DAT_0013_A1.cor"), fit="clip")
+```
+
+`.rd3` stores 16-bit integers, so floats are rounded. `fit="clip"` cuts values outside
+±32767, `fit="scale"` rescales the peak to 32767 (relative amplitudes kept, absolute lost),
+and the default `fit="error"` refuses data that doesn't fit. Use the extension `.rd7` for
+32-bit output (`ext=".rd7"`). The header is copied from the template, with SAMPLES,
+TIMEWINDOW, LAST TRACE and STOP POSITION updated. Existing files are never overwritten
+unless you pass `overwrite=True` (or `--overwrite` on the command line).
 
 ## Starting a new season
 
@@ -133,6 +175,7 @@ radar_parsing/
 ├── qc.py         fix-cor QC
 ├── tracks.py     compile tracks, track-qc, per-trace navigation
 ├── inventory.py  inventory and checksums
+├── writer.py     .rad/.rd3 writing, export and merge for ReflexW
 ├── plot.py       quick-look plots
 └── geo.py        distances, hemisphere handling
 ```
@@ -143,6 +186,9 @@ Version 0.1 was a set of scripts in `scripts/`; see [CHANGELOG.md](CHANGELOG.md)
 
 Rickard Pettersson (Uppsala University) has MATLAB readers and writers for Malå files
 (`malaread3`, `malawrite3`, …). They are not part of this repository; ask him for them.
+This package's reader and writer were written independently from the file format; they
+cover what `malaread3`/`malawrite3`/`uimalaread` do. For his `wgs2ps`/`ps2wgs`
+polar-stereographic conversions, set `epsg = 3031` in the config.
 
 ## License
 

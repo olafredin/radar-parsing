@@ -16,8 +16,13 @@ def read_rad(path: str | Path) -> dict[str, Any]:
     Numeric values are converted to int/float where possible; everything else
     is kept as a string (e.g. ``ANTENNAS: '250 MHz shielded=1'``).
     """
+    return read_rad_text(Path(path).read_text(encoding="utf-8", errors="ignore"))
+
+
+def read_rad_text(text: str) -> dict[str, Any]:
+    """Parse .rad header text (see :func:`read_rad`)."""
     meta: dict[str, Any] = {}
-    for line in Path(path).read_text(encoding="utf-8", errors="ignore").splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if not line or ":" not in line or line.startswith(("#", ";", "//")):
             continue

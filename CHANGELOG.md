@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 — 2026-10-23
+
+### Added
+- `export`: recordings copied to `output/reflexw/` with the QC'd `.cor` and a corrected
+  `LAST TRACE`, ready for ReflexW (MALA RD3 import, RAMAC-GPS trace headers).
+- `merge`: consecutive recordings joined into one profile, with `.cor` trace numbers offset
+  and a time/distance gap report per joint; mismatched settings are refused.
+- `writer.write_bundle()` / `write_traces()`: write processed arrays back as `.rad` +
+  `.rd3`/`.rd7` (int16/int32, `fit` = error/clip/scale). `.rad` headers are rewritten
+  with their original formatting (an unchanged header round-trips byte for byte).
+
 ## 0.2.0 — 2026-10-23
 
 Refactor of the 2025/26 field scripts into a package with a command-line interface.
