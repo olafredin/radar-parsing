@@ -1,6 +1,45 @@
+# ---- Data: never commit survey data -----------------------------------------
+# Raw Malå exports and everything the pipeline produces stay local; data is
+# shared separately (FTP), see README.
+data_raw/
+data/
+output/
+output_cor_qc/
+*.rd3
+*.rd7
+*.rad
+*.cor
+*.mrk
+*.em
+*.zip
+MANIFEST.sha256
+
+# Third-party MATLAB tools (not ours to redistribute)
+matlab/
+*.m
+
+# ---- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+env/
+.venv/
+venv/
+.env
+
+# ---- R / editors / OS -------------------------------------------------------
 .Rhistory
 .RData
 .Rproj.user/
-__pycache__/
-*.pyc
-.env
+.vscode/
+.idea/
+desktop.ini
+Thumbs.db
+.DS_Store
+~$*

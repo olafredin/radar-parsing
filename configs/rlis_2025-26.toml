@@ -1,0 +1,35 @@
+# QC parameters used for the 2025/26 Riiser-Larsen Ice Shelf season.
+# These are also the built-in defaults; copy this file and edit it for a new
+# season or survey area, then run e.g.
+#   radar-parsing run --config configs/my_season.toml
+
+# Output projection for easting/northing in the track tables.
+# 32729 = WGS 84 / UTM zone 29S (6-12 deg W). Use 3031 (Antarctic Polar
+# Stereographic) if the tracks span several UTM zones.
+epsg = 32729
+
+[bbox]
+# Plausible survey envelope, signed decimal degrees (south and west negative).
+# Fixes outside it are treated as GNSS errors and interpolated.
+lat_min = -73.0
+lat_max = -70.0
+lon_min = -13.0
+lon_max = -10.0
+
+[cor_qc]
+expected_ns = "S"
+expected_ew = "W"
+teleport_qc = true
+max_speed_mps = 6.0     # snowmobile + radar sledge upper bound
+max_step_m = 40.0       # used when a timestamp is garbled
+min_dt_s = 0.05
+relock_after = 10       # accept this many consecutive self-consistent rejected fixes (0 = never)
+use_trace_time = true   # also time fixes by trace number x .rad TIME INTERVAL
+time_tol_s = 2.0        # timestamps further off the trace clock are treated as garbled
+elev_qc = true
+elev_max_dev_m = 2.0    # spike threshold vs. running median
+elev_window = 11        # running-median window (number of fixes)
+
+[track_qc]
+max_speed_mps = 10.0
+action = "interpolate"  # or "drop"

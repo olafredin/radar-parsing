@@ -1,0 +1,7 @@
+# Same as pyproject.toml, for `pip install -r requirements.txt` without installing the package
+numpy>=1.24
+pandas>=2.0
+pyproj>=3.4
+matplotlib>=3.6
+tomli>=1.1; python_version < "3.11"
+pytest>=7

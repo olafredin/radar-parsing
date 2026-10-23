@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radar-parsing"
+version = "0.2.0"
+description = "Parse, quality-control and plot Malå ground-penetrating radar data (.rad/.rd3/.cor)"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Ola Fredin" }]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyproj>=3.4",
+    "matplotlib>=3.6",
+    "tomli>=1.1; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+radar-parsing = "radar_parsing.cli:main"
+
+[tool.setuptools]
+packages = ["radar_parsing"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
