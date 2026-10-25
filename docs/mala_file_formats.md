@@ -70,7 +70,7 @@ with GNSS data.
 ### Degraded GNSS solutions
 
 The glitches above are character-level and isolated. A different problem is a degraded GNSS
-solution: smooth excursions that no spike filter can catch, and that should not be "fixed".
+solution: smooth excursions that no spike filter can catch, and that should probably not be "fixed".
 Example: DAT_0051 on 18 Dec 2025, ~10:11–10:16, where the elevation drifts from +4 m to
 −425 m and back up to +268 m while the quality value rises from 0.6–0.7 to 2.5–8.5. Check
 `elev_min` and `elev_max` in `output/inventory.csv`, and treat positions in such windows with
@@ -81,8 +81,7 @@ flag on its own.
 
 Trace numbering stops while recording is paused, but the GNSS clock runs on. For example,
 DAT_0012 has 23 880 traces (5 970 s at 0.25 s) but spans 8 144 s of GNSS time. In 2025/26 the
-sledge often moved during pauses (up to 1.3 km), so `fix-cor` never interpolates across a pause,
-and the GIS export splits transects there. This is also why the teleport
+sledge often moved during pauses (up to 1.3 km), probably because the Malå units ran out of battery, so `fix-cor` never interpolates across a pause, and the GIS export splits transects there. This is also why the teleport
 test uses the larger of the trace-clock and timestamp differences.
 
 ### Stale LAST TRACE

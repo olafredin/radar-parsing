@@ -1,6 +1,6 @@
 """Processing parameters.
 
-All QC thresholds live here so that a new field season or survey area only
+All QC thresholds are here so that a new field season or survey area only
 needs a new TOML file (see ``configs/``), not code changes. The defaults
 reproduce the settings used for the 2025/26 Riiser-Larsen Ice Shelf season.
 """

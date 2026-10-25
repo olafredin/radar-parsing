@@ -16,10 +16,10 @@ epsg = 32729
 [bbox]
 # Plausible survey envelope, signed decimal degrees (south and west negative).
 # Fixes outside it are treated as GNSS errors and interpolated.
-lat_min = -73.0
-lat_max = -70.0
-lon_min = -13.0
-lon_max = -10.0
+lat_min = -74.0
+lat_max = -69.0
+lon_min = -14.0
+lon_max = -9.0
 
 [cor_qc]
 expected_ns = "S"

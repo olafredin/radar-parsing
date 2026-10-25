@@ -4,12 +4,12 @@ Tools to parse, quality-control and quick-look plot **Malå ground-penetrating r
 data: `.rad` headers, `.rd3`/`.rd7` traces and `.cor` GNSS positions.
 
 Written for the 2025/26 snowmobile-towed GPR survey on the western Riiser-Larsen Ice Shelf
-(near Neumayer III; 13–23 December 2025; 250 and 500 MHz shielded antennas, time-triggered
+(near Neumayer III; December 2025; 250 and 500 MHz shielded antennas, time-triggered
 traces every 0.25 s). It works for any Malå export with the same file set: survey-specific
 settings live in a config file.
 
 > **Data is not in this repository.** Raw files and pipeline outputs are git-ignored. Get the
-> data from Ola Fredin (shared by FTP) and put it in `data_raw/` (see [Data layout](#data-layout)).
+> data and put it in `data_raw/` (see [Data layout](#data-layout)).
 
 > [!WARNING]
 > **New survey area? Set the bounding box BEFORE you process anything.**
@@ -185,10 +185,10 @@ and the default `fit="error"` refuses data that doesn't fit. Use the extension `
 TIMEWINDOW, LAST TRACE and STOP POSITION updated. Existing files are never overwritten
 unless you pass `overwrite=True` (or `--overwrite` on the command line).
 
-## Starting a new season
+## Starting a new season - important to read!
 
 **Do this before processing any data from a new area.** The built-in settings, and
-`configs/rlis_2025-26.toml`, only fit the 2025/26 survey (73–70° S, 13–10° W; they do not even
+`configs/rlis_2025-26.toml`, only fit the 2025/26 survey (74–69° S, 14–09° W; they do not even
 include Neumayer III at 8.3° W). With them, a survey elsewhere loses its positions: fixes
 outside the box are treated as GNSS errors and replaced by interpolation, and recordings
 entirely outside get none.
@@ -215,7 +215,7 @@ entirely outside get none.
 
 ## Transferring data
 
-The raw data is ~2 GB and goes by FTP, not git. Before sending:
+The raw data are GBs and goes by FTP or USB. Before sending:
 
 ```bash
 radar-parsing manifest             # writes data_raw/MANIFEST.sha256
@@ -254,8 +254,7 @@ Version 0.1 was a set of scripts in `scripts/`; see [CHANGELOG.md](CHANGELOG.md)
 
 Rickard Pettersson (Uppsala University) has MATLAB readers and writers for Malå files
 (`malaread3`, `malawrite3`, …). They are not part of this repository; ask him for them.
-This package's reader and writer were written independently from the file format; they
-cover what `malaread3`/`malawrite3`/`uimalaread` do. For his `wgs2ps`/`ps2wgs`
+This package's reader and writer cover what `malaread3`/`malawrite3`/`uimalaread` do. For his `wgs2ps`/`ps2wgs`
 polar-stereographic conversions, set `epsg = 3031` in the config.
 
 ## License
