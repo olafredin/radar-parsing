@@ -116,3 +116,14 @@ def test_cli_export_and_merge(raw_dir, tmp_path, capsys):
     # DAT_0002 is 500 MHz: refused with a clear message
     with pytest.raises(SystemExit, match="antenna 500 vs 250 MHz"):
         main(["merge", "DAT_0001_A1", "DAT_0002_A1", *args])
+
+
+def test_merge_failure_leaves_no_partial_files(tmp_path):
+    raw = tmp_path / "raw"
+    make_bundle(raw, "DAT_0010_A1", straight_track(30))
+    make_bundle(raw, "DAT_0011_A1", straight_track(30, start_s=70))
+    with open(raw / "DAT_0011_A1.rd3", "ab") as fh:  # half-copied: not a whole number of traces
+        fh.write(b"\0")
+    with pytest.raises(ValueError, match="not a multiple"):
+        merge_bundles(["DAT_0010_A1", "DAT_0011_A1"], raw, None, tmp_path / "rw")
+    assert list((tmp_path / "rw").iterdir()) == []

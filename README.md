@@ -11,6 +11,15 @@ settings live in a config file.
 > **Data is not in this repository.** Raw files and pipeline outputs are git-ignored. Get the
 > data from Ola Fredin (shared by FTP) and put it in `data_raw/` (see [Data layout](#data-layout)).
 
+> [!WARNING]
+> **New survey area? Set the bounding box BEFORE you process anything.**
+> Without `--config`, the built-in settings are for the 2025/26 area only: **73–70° S, 13–10° W**,
+> western hemisphere, UTM zone 29S. Every GNSS fix outside that box is treated as an error.
+> Inside a recording its position is **replaced by interpolation** (the track can be off by
+> kilometres), and a recording entirely outside the box gets no positions at all.
+> Make your own config and pass it to every command:
+> see [Starting a new season](#starting-a-new-season).
+
 ---
 
 ## Install
@@ -60,6 +69,10 @@ radar-parsing/
 Other folders can be used with `--raw-dir` and `--out-dir` on any command.
 
 ## Quick start
+
+Outside the 2025/26 survey area, first make a config with your bounding box
+([Starting a new season](#starting-a-new-season)) and add `--config configs/<yours>.toml`
+to each command below.
 
 ```bash
 radar-parsing run                    # fix-cor → tracks → track-qc → inventory → gis
@@ -174,10 +187,31 @@ unless you pass `overwrite=True` (or `--overwrite` on the command line).
 
 ## Starting a new season
 
-1. Copy the Malå export (all files per recording) into `data_raw/` (or a new folder, used with `--raw-dir`).
-2. Copy `configs/rlis_2025-26.toml` to a new file. Set the **bounding box** for the new survey area; fixes outside it are discarded. Check `epsg`: use UTM 29S only between 6° W and 12° W, otherwise the right UTM zone or 3031.
-3. Run `radar-parsing run --config configs/<new>.toml` and read `output/cor_qc_report.csv` and `output/inventory.csv`. Many interpolated fixes, or `data_ok = False`, points to a problem.
-4. Spot-check a few recordings with `plot … --save`.
+**Do this before processing any data from a new area.** The built-in settings, and
+`configs/rlis_2025-26.toml`, only fit the 2025/26 survey (73–70° S, 13–10° W; they do not even
+include Neumayer III at 8.3° W). With them, a survey elsewhere loses its positions: fixes
+outside the box are treated as GNSS errors and replaced by interpolation, and recordings
+entirely outside get none.
+
+1. **Make a config for the new area.** Copy `configs/rlis_2025-26.toml` to e.g.
+   `configs/<area>_2026-27.toml` and edit:
+   - `[bbox]`: the whole area you might drive in, plus a generous margin (half a degree or
+     more). Signed degrees: south and west are negative. A box that is too big does
+     little harm, since the speed test still catches garbled fixes; one that is too small
+     corrupts the tracks.
+   - `[cor_qc]` `expected_ew`: `"W"` west of Greenwich, `"E"` east of it.
+   - `epsg` (the track tables): the UTM zone of the area. South zones are `327xx`: 29S
+     (12–6° W) is `32729`, 28S (18–12° W) `32728`, 27S (24–18° W) `32727`. If the area spans
+     several zones, use `3031`. The GeoPackage stays in `3031` (`[gis]`).
+2. Copy the Malå export (all files per recording) into `data_raw/` (or a new folder, used with `--raw-dir`).
+3. Run `radar-parsing run --config configs/<area>_2026-27.toml`, and **pass the same
+   `--config` to every later command**. Without it the 2025/26 box applies again.
+4. Check the `fix-cor` output. A **WARNING ... outside the bbox** means the box is wrong:
+   it lists every file with a long stretch outside the box (`max_outside_run` ≥ 30 in
+   `cor_qc_report.csv`). Fix the config and run again; the outputs are rebuilt from the raw
+   files. Then read `output/cor_qc_report.csv` and `output/inventory.csv`. Many interpolated
+   fixes, or `data_ok = False`, points to a problem.
+5. Spot-check a few recordings with `plot … --save`, and the tracks in QGIS.
 
 ## Transferring data
 

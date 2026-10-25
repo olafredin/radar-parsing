@@ -14,6 +14,10 @@ from .config import Config, load_config
 
 log = logging.getLogger("radar_parsing")
 
+# fix-cor warns when a file has this many consecutive fixes outside the bbox.
+# Garbled fixes came in runs of at most 15 in 2025/26.
+OUTSIDE_RUN_WARN = 30
+
 
 class Paths:
     def __init__(self, args: argparse.Namespace):
@@ -62,6 +66,18 @@ def cmd_fix_cor(p: Paths, cfg: Config, args) -> None:
     tq = cfg.cor_qc
     print(f"  teleport QC {'on' if tq.teleport_qc else 'off'} (max {tq.max_speed_mps} m/s, step {tq.max_step_m} m)")
     print(f"  per-file report: {p.cor_qc_report}")
+    if len(report):
+        outside = report[(report["max_outside_run"] >= OUTSIDE_RUN_WARN)
+                         | ((report["status"] == "no_valid_fix") & (report["n_outside_bbox"] > 0))]
+        if len(outside):
+            b = cfg.bbox
+            print(f"  WARNING: {len(outside)} file(s) have long stretches outside the bbox "
+                  f"(lat {b.lat_min}..{b.lat_max}, lon {b.lon_min}..{b.lon_max}) or not in the "
+                  f"{tq.expected_ns}/{tq.expected_ew} hemispheres. Those positions were replaced by "
+                  f"interpolation or the file was skipped. Check [bbox] and [cor_qc] expected_ns/expected_ew "
+                  f"in the config (--config):")
+            for _, r in outside.iterrows():
+                print(f"    {r['file']}: {r['n_outside_bbox']} of {r['n_lines']} fixes outside ({r['status']})")
 
 
 def cmd_tracks(p: Paths, cfg: Config, args) -> None:
@@ -105,7 +121,8 @@ def cmd_inventory(p: Paths, cfg: Config, args) -> None:
         bad = df.loc[~df["data_ok"], "file_base"].tolist()
         stale = df.loc[df["data_ok"] & ~df["header_last_trace_ok"], "file_base"].tolist()
         if bad:
-            print(f"  WARNING: .rd3/.rd7 missing or size inconsistent with SAMPLES: {', '.join(bad)}")
+            print(f"  WARNING: .rd3/.rd7 missing, .rad without SAMPLES, or .rd3/.rd7 size "
+                  f"inconsistent with SAMPLES (half-copied?): {', '.join(bad)}")
         if stale:
             print(f"  note: .rad LAST TRACE differs from the .rd3 size in {len(stale)} recording(s) "
                   f"({', '.join(stale)}); the .rd3 size is used")
@@ -204,6 +221,9 @@ def cmd_gis(p: Paths, cfg: Config, args) -> None:
     if flags is not None and len(flags):
         flags["time_ignored"] = flags["time_ignored"].astype(str).str.lower() == "true"
     layers = build_layers(p.cor_qc, p.raw, cfg, flags=flags, reflexw_dir=p.reflexw)
+    if not layers:
+        print("gis: no recording with GNSS fixes; nothing written")
+        return
     if getattr(args, "format", "gpkg") == "shp":
         out = write_shapefiles(layers, p.shp_dir)
         where = p.shp_dir
@@ -290,8 +310,14 @@ COMMANDS = {
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING, format="%(levelname)s %(message)s")
-    cfg = load_config(args.config)
-    COMMANDS[args.command](Paths(args), cfg, args)
+    try:
+        cfg = load_config(args.config)
+        COMMANDS[args.command](Paths(args), cfg, args)
+    except (OSError, ValueError) as e:
+        # Missing, half-copied or inconsistent files: a message, not a traceback (-v for that)
+        if args.verbose:
+            raise
+        sys.exit(f"{args.command}: {e}")
 
 
 if __name__ == "__main__":

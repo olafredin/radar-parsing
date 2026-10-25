@@ -76,3 +76,33 @@ def test_manifest(raw_dir):
     assert check_manifest(raw_dir) == []
     (raw_dir / "DAT_0001_A1.mrk").write_text("changed")
     assert check_manifest(raw_dir) == [("DAT_0001_A1.mrk", "checksum mismatch")]
+
+
+def test_cli_warns_when_track_leaves_bbox(raw_dir, tmp_path, capsys):
+    from conftest import straight_track, write_bundle
+
+    write_bundle(raw_dir, "DAT_0005_A1", straight_track(40))
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[bbox]\nlat_max = -71.899955\n")  # fixes 5.. are outside
+    main(["fix-cor", "--raw-dir", str(raw_dir), "--out-dir", str(tmp_path / "o"), "--config", str(cfg)])
+    out = capsys.readouterr().out
+    assert "WARNING" in out and "DAT_0005_A1.cor: 35 of 40 fixes outside (written)" in out
+
+
+def test_cli_run_without_gnss_and_with_broken_header(tmp_path, capsys):
+    from conftest import write_bundle
+
+    raw = tmp_path / "raw"
+    write_bundle(raw, "DAT_0001_A1", [])           # first day: no GNSS yet
+    write_bundle(raw, "DAT_0002_A1", [])
+    (raw / "DAT_0002_A1.rad").write_text("")       # recording cut off
+    main(["run", "--raw-dir", str(raw), "--out-dir", str(tmp_path / "o")])
+    out = capsys.readouterr().out
+    assert "track-qc: flagged 0 of 0" in out and "DAT_0002_A1" in out.split("WARNING")[1]
+    inv = pd.read_csv(tmp_path / "o" / "inventory.csv")
+    assert inv["data_ok"].tolist() == [True, False]
+
+
+def test_cli_missing_recording_is_a_message(raw_dir, tmp_path):
+    with pytest.raises(SystemExit, match="plot: Missing header"):
+        main(["plot", "DAT_9999_A1", "--raw-dir", str(raw_dir), "--out-dir", str(tmp_path), "--save"])

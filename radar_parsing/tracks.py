@@ -116,9 +116,13 @@ def track_qc(df: pd.DataFrame, cfg: Config | None = None) -> tuple[pd.DataFrame,
         raise ValueError(f"Track table is missing columns: {sorted(missing)}")
 
     df = df.assign(dt=pd.to_datetime(df["date"].astype(str) + " " + df["time"].astype(str), errors="coerce"))
+    if df.empty:  # no recording with GNSS yet
+        out = df.assign(qc_in_bbox=pd.Series(dtype=bool), qc_speed_m_s=pd.Series(dtype=float),
+                        qc_bad=pd.Series(dtype=bool), qc_action=pd.Series(dtype=object))
+        return out, {"n_total": 0, "n_bad": 0, "n_out": 0}
     groups = [_qc_one_track(g, cfg) for _, g in df.groupby("file_base", sort=False)]
-    qc = pd.concat(groups, ignore_index=True) if groups else df
-    stats = {"n_total": len(qc), "n_bad": int(qc["qc_bad"].sum()) if len(qc) else 0}
+    qc = pd.concat(groups, ignore_index=True)
+    stats = {"n_total": len(qc), "n_bad": int(qc["qc_bad"].sum())}
 
     if cfg.track_qc.action == "drop":
         out = qc.loc[~qc["qc_bad"]].copy()

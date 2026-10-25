@@ -150,3 +150,21 @@ def test_directory(raw_dir, tmp_path):
         "DAT_0003_A1.cor": "empty",
         "DAT_0004_A1.cor": "no_valid_fix",
     }
+
+
+def test_track_outside_bbox_is_counted(raw_dir, tmp_path):
+    cfg = Config()
+    cfg.bbox.lat_max = -71.9 + 15e-5   # the track leaves the bbox after 16 of 30 fixes
+    res = qc_cor_file(raw_dir / "DAT_0001_A1.cor", tmp_path / "q.cor", cfg)
+    assert res.n_outside_bbox == 14 and res.max_outside_run == 14
+    res = qc_cor_file(raw_dir / "DAT_0002_A1.cor", tmp_path / "q2.cor")
+    assert res.n_outside_bbox == 2 and res.max_outside_run == 1   # digit loss, wrong hemisphere
+
+
+def test_stale_qc_copy_is_removed(raw_dir, tmp_path):
+    qc = tmp_path / "qc"
+    qc_directory(raw_dir, qc)
+    assert (qc / "DAT_0001_A1.cor").exists()
+    (raw_dir / "DAT_0001_A1.cor").write_bytes(b"")
+    qc_directory(raw_dir, qc)
+    assert not (qc / "DAT_0001_A1.cor").exists()

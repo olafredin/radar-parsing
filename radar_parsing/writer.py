@@ -331,30 +331,36 @@ def merge_bundles(
 
     parts, cor_out, offset = [], [], 0
     ends: list[tuple] = []  # (first_fix, last_fix) per part, as (lat, lon, datetime)
-    with open(files["rd3"], "wb") as fh:
-        for b, h in zip(bundles, headers):
-            traces = read_traces(b.data_path, h.samples)
-            for i in range(0, traces.shape[0], CHUNK_TRACES):
-                fh.write(np.ascontiguousarray(traces[i:i + CHUNK_TRACES]).tobytes())
-            cor_path, cor_kind = _cor_source(b.base, raw_dir, qc_dir)
-            if cor_path:
-                for line in read_lines(cor_path):
-                    f = line.split("\t")
-                    if line.strip() and f[0].strip().isdigit():
-                        f[0] = str(int(f[0]) + offset)
-                        cor_out.append("\t".join(f))
-                ends.append(_first_last_fix(cor_path))
-            else:
-                ends.append((None, None))
-            parts.append({"base": b.base, "n_traces": traces.shape[0], "first_trace": offset + 1, "cor": cor_kind})
-            offset += traces.shape[0]
+    try:
+        with open(files["rd3"], "wb") as fh:
+            for b, h in zip(bundles, headers):
+                traces = read_traces(b.data_path, h.samples)
+                for i in range(0, traces.shape[0], CHUNK_TRACES):
+                    fh.write(np.ascontiguousarray(traces[i:i + CHUNK_TRACES]).tobytes())
+                cor_path, cor_kind = _cor_source(b.base, raw_dir, qc_dir)
+                if cor_path:
+                    for line in read_lines(cor_path):
+                        f = line.split("\t")
+                        if line.strip() and f[0].strip().isdigit():
+                            f[0] = str(int(f[0]) + offset)
+                            cor_out.append("\t".join(f))
+                    ends.append(_first_last_fix(cor_path))
+                else:
+                    ends.append((None, None))
+                parts.append({"base": b.base, "n_traces": traces.shape[0], "first_trace": offset + 1, "cor": cor_kind})
+                offset += traces.shape[0]
 
-    rad = RadFile.read(ref.rad_path)
-    _fix_trace_count(rad, offset)
-    rad.write(files["rad"], overwrite=True)
-    write_lines(files["cor"], cor_out)
-    if "mrk" in files:
-        shutil.copyfile(mrk, files["mrk"])
+        rad = RadFile.read(ref.rad_path)
+        _fix_trace_count(rad, offset)
+        rad.write(files["rad"], overwrite=True)
+        write_lines(files["cor"], cor_out)
+        if "mrk" in files:
+            shutil.copyfile(mrk, files["mrk"])
+    except BaseException:
+        # Don't leave a half-written profile behind (it would also block a retry)
+        for p in files.values():
+            p.unlink(missing_ok=True)
+        raise
 
     junctions = []
     for (b1, (_, last)), (b2, (first, _)) in zip(zip(bases, ends), zip(bases[1:], ends[1:])):

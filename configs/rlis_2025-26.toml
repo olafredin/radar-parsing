@@ -1,4 +1,9 @@
 # QC parameters used for the 2025/26 Riiser-Larsen Ice Shelf season.
+#
+# !! NEW SURVEY AREA: set [bbox] (and expected_ew, epsg) before processing. !!
+# GNSS fixes outside the bbox are treated as errors and their positions are
+# replaced by interpolation. See "Starting a new season" in the README.
+#
 # These are also the built-in defaults; copy this file and edit it for a new
 # season or survey area, then run e.g.
 #   radar-parsing run --config configs/my_season.toml

@@ -59,6 +59,8 @@ class CorQCResult:
     status: str               # "written", "empty", "no_valid_fix"
     n_lines: int = 0
     n_invalid_fix: int = 0    # unparseable / zero / outside bbox / wrong hemisphere
+    n_outside_bbox: int = 0   # parseable fixes outside the bbox or with the wrong hemisphere
+    max_outside_run: int = 0  # longest run of those; long runs mean the bbox is wrong
     n_time_garbled: int = 0   # timestamps unparseable or off the trace clock (not used)
     n_teleport: int = 0
     n_interpolated: int = 0   # n_invalid_fix + n_teleport
@@ -287,6 +289,7 @@ def qc_cor_file(
     repairs: list[str] = []
     lat_dec: Optional[int] = None
     lon_dec: Optional[int] = None
+    outside_run = 0
 
     for raw in read_lines(cor_path):
         norm = normalize_fields(raw)
@@ -316,6 +319,11 @@ def qc_cor_file(
         la = to_signed(lat_u, ns, "S")
         lo = to_signed(lon_u, ew, "W")
         ok = bbox.contains(la, lo) and ns == qc.expected_ns and ew == qc.expected_ew
+        # Garbled fixes outside the bbox come in short runs (<= 15 in 2025/26);
+        # a long run is a track that really left the bbox.
+        outside_run = 0 if ok else outside_run + 1
+        res.n_outside_bbox += not ok
+        res.max_outside_run = max(res.max_outside_run, outside_run)
         lat_s.append(la if ok else None)
         lon_s.append(lo if ok else None)
         valid.append(ok)
@@ -394,7 +402,11 @@ def flags_table(results: Sequence[CorQCResult]) -> pd.DataFrame:
 
 
 def qc_directory(raw_dir: str | Path, out_dir: str | Path, cfg: Config | None = None) -> list[CorQCResult]:
-    """Run :func:`qc_cor_file` on every .cor file in ``raw_dir``."""
+    """Run :func:`qc_cor_file` on every .cor file in ``raw_dir``.
+
+    A QC'd copy left over from an earlier run is removed when the file is now
+    skipped, so later steps do not pick up stale positions.
+    """
     raw_dir, out_dir = Path(raw_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     cor_files = sorted(p for p in raw_dir.iterdir() if p.is_file() and p.suffix.lower() == ".cor")
@@ -402,5 +414,8 @@ def qc_directory(raw_dir: str | Path, out_dir: str | Path, cfg: Config | None = 
     for p in cor_files:
         rad = p.with_suffix(".rad")
         dt = RadHeader.from_file(rad).trace_interval_s if rad.exists() else None
-        results.append(qc_cor_file(p, out_dir / p.name, cfg, trace_interval_s=dt))
+        res = qc_cor_file(p, out_dir / p.name, cfg, trace_interval_s=dt)
+        if res.status != "written":
+            (out_dir / p.name).unlink(missing_ok=True)
+        results.append(res)
     return results

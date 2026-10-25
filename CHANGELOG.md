@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.1 — 2026-10-25
+
+### Fixed
+- A track that left the bounding box was silently replaced by interpolation (in a test with
+  the box edge across DAT_0013, 972 fixes moved by up to 2.1 km), and a recording entirely
+  outside it was skipped with no explanation. `fix-cor` now reports `n_outside_bbox` and
+  `max_outside_run` per file and prints a WARNING naming every file with ≥ 30 consecutive
+  fixes outside the box or hemisphere. Garbled fixes in 2025/26 came in runs of ≤ 15, so
+  that data does not trigger it.
+- `run` crashed in `track-qc` ("No objects to concatenate") when no recording had GNSS
+  fixes yet, e.g. on the first day of a season or with a wrong bbox. `gis` now says
+  there is nothing to write instead of failing.
+- A `.rad` without `SAMPLES` (empty or cut off) stopped `run` in `inventory`; it is now
+  listed with `data_ok = False` and a warning.
+- A QC'd `.cor` from an earlier run stayed in `output/cor_qc/` and went into the tracks
+  after the raw file became empty or unusable; it is now removed.
+- A failed `merge`, e.g. on a half-copied `.rd3`, left a partial profile behind that
+  blocked the retry; its outputs are now removed.
+- Missing or inconsistent files give a one-line error instead of a traceback
+  (`-v` shows the traceback).
+- Minimum geopandas raised to 0.14.4; older versions fail with fiona ≥ 1.10.
+
 ## 0.4.0 — 2026-10-23
 
 ### Added

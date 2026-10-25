@@ -32,10 +32,13 @@ def inventory(raw_dir: str | Path, qc_dir: str | Path | None = None, max_step_m:
     rows = []
     for base in _bases(raw_dir):
         hdr = RadHeader.from_file(raw_dir / f"{base}.rad")
+        # A .rad without SAMPLES (empty, or cut off by an interrupted copy or
+        # recording) makes the traces unreadable; report it instead of failing.
+        samples = hdr.samples if "SAMPLES" in hdr.raw else None
         row: dict = {
             "file_base": base,
             "antenna_mhz": hdr.antenna_mhz,
-            "samples": hdr.samples,
+            "samples": samples,
             "sampling_frequency_mhz": hdr.sampling_frequency_mhz,
             "time_window_ns": hdr.time_window_ns,
             "trace_interval_s": hdr.trace_interval_s,
@@ -44,8 +47,8 @@ def inventory(raw_dir: str | Path, qc_dir: str | Path | None = None, max_step_m:
         data = next((raw_dir / f"{base}{e}" for e in DTYPES if (raw_dir / f"{base}{e}").exists()), None)
         row["data_file"] = data.name if data else None
         try:
-            row["n_traces"] = n_traces_from_size(data, hdr.samples) if data else None
-            row["data_ok"] = data is not None   # present, size consistent with SAMPLES
+            row["n_traces"] = n_traces_from_size(data, samples) if data and samples else None
+            row["data_ok"] = row["n_traces"] is not None   # present, size consistent with SAMPLES
         except ValueError:
             row["n_traces"], row["data_ok"] = None, False
         # In 2025/26 some headers have a stale LAST TRACE; the .rd3 size and the

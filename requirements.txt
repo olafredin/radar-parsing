@@ -6,6 +6,6 @@ matplotlib>=3.6
 tomli>=1.1; python_version < "3.11"
 pytest>=7
 # optional, for the GeoPackage/shapefile export (radar-parsing gis)
-geopandas>=0.14
+geopandas>=0.14.4
 pyogrio>=0.7
 shapely>=2.0
